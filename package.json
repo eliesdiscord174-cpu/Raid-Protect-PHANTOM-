@@ -1,0 +1,14 @@
+{
+  "name": "anti-raid-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord anti-raid multi-serveurs avec commandes slash",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
+  }
+}
