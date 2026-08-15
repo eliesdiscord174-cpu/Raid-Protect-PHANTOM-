@@ -105,15 +105,17 @@ client.on("guildMemberAdd", async (member) => {
   // Seuil dépassé : raid détecté
   console.log(`🚨 Raid détecté sur ${guild.name} (${filtered.length} joins en ${cfg.windowSeconds}s)`);
 
+  const activeActions = cfg.actions && cfg.actions.length ? cfg.actions : ["alert"];
+
   await sendAlert(
     guild,
     cfg,
     "🚨 Raid détecté !",
-    `**${filtered.length} membres** ont rejoint en moins de **${cfg.windowSeconds} secondes**.\nAction configurée : **${cfg.action}**`
+    `**${filtered.length} membres** ont rejoint en moins de **${cfg.windowSeconds} secondes**.\nActions configurées : **${activeActions.join(", ")}**`
   );
 
-  if (cfg.action === "lockdown" && !cfg.lockedDown) {
-    const locked = await lockAllChannels(guild);
+  if (activeActions.includes("lockdown") && !cfg.lockedDown) {
+    const locked = await lockAllChannels(guild, cfg);
     updateConfig(guild.id, { lockedDown: true });
     await sendAlert(
       guild,
@@ -124,22 +126,23 @@ client.on("guildMemberAdd", async (member) => {
     );
   }
 
-  if (cfg.action === "kick" || cfg.action === "ban") {
-    if (isAccountSuspicious(member, cfg.minAccountAgeDays)) {
-      try {
-        if (cfg.action === "kick") await member.kick("Anti-raid : compte suspect pendant un raid détecté");
-        else await member.ban({ reason: "Anti-raid : compte suspect pendant un raid détecté" });
-        await sendAlert(
-          guild,
-          cfg,
-          `👢 Membre ${cfg.action === "kick" ? "expulsé" : "banni"}`,
-          `**${member.user.tag}** (compte créé il y a moins de ${cfg.minAccountAgeDays} jours) a été ${
-            cfg.action === "kick" ? "expulsé" : "banni"
-          } automatiquement.`
-        );
-      } catch (err) {
-        console.error("Erreur action anti-raid :", err.message);
-      }
+  // ban prioritaire sur kick si les deux sont activés en même temps
+  const memberAction = activeActions.includes("ban") ? "ban" : activeActions.includes("kick") ? "kick" : null;
+
+  if (memberAction && isAccountSuspicious(member, cfg.minAccountAgeDays)) {
+    try {
+      if (memberAction === "kick") await member.kick("Anti-raid : compte suspect pendant un raid détecté");
+      else await member.ban({ reason: "Anti-raid : compte suspect pendant un raid détecté" });
+      await sendAlert(
+        guild,
+        cfg,
+        `👢 Membre ${memberAction === "kick" ? "expulsé" : "banni"}`,
+        `**${member.user.tag}** (compte créé il y a moins de ${cfg.minAccountAgeDays} jours) a été ${
+          memberAction === "kick" ? "expulsé" : "banni"
+        } automatiquement.`
+      );
+    } catch (err) {
+      console.error("Erreur action anti-raid :", err.message);
     }
   }
 
