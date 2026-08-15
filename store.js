@@ -36,6 +36,9 @@ const DEFAULT_CONFIG = {
   logChannelId: null,
   whitelistRoleIds: [],
   lockdownRoleIds: [],
+  // Sauvegarde de l'état exact des salons avant le dernier verrouillage,
+  // pour pouvoir tout restaurer fidèlement au lieu de remettre "neutre".
+  lockdownSnapshot: null,
   lockedDown: false,
 };
 
