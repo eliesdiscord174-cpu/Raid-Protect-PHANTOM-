@@ -3,14 +3,15 @@ const { getConfig, updateConfig } = require("../store");
 
 // Verrouille les salons. Si cfg.lockdownRoleIds est vide, bloque @everyone
 // (comportement par défaut). Sinon, ne bloque que les rôles choisis.
-// Dans tous les cas, les rôles en liste blanche (cfg.whitelistRoleIds) gardent
-// explicitement le droit d'écrire, même si @everyone ou leur rôle est bloqué.
+// Les rôles en liste blanche gardent explicitement le droit d'écrire.
+// Retourne { locked, errors } pour que l'appelant sache si ça a vraiment marché.
 async function lockAllChannels(guild, cfg = {}) {
   const targetRoleIds = cfg.lockdownRoleIds && cfg.lockdownRoleIds.length ? cfg.lockdownRoleIds : [guild.roles.everyone.id];
   const whitelistRoleIds = cfg.whitelistRoleIds || [];
 
   const channels = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
   let locked = 0;
+  const errors = [];
   for (const [, channel] of channels) {
     try {
       for (const roleId of targetRoleIds) {
@@ -20,11 +21,11 @@ async function lockAllChannels(guild, cfg = {}) {
         await channel.permissionOverwrites.edit(roleId, { SendMessages: true });
       }
       locked++;
-    } catch {
-      // ignore les salons où le bot n'a pas la permission de modifier
+    } catch (err) {
+      errors.push(`#${channel.name} : ${err.message}`);
     }
   }
-  return locked;
+  return { locked, errors };
 }
 
 async function unlockAllChannels(guild, cfg = {}) {
@@ -33,6 +34,7 @@ async function unlockAllChannels(guild, cfg = {}) {
 
   const channels = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
   let unlocked = 0;
+  const errors = [];
   for (const [, channel] of channels) {
     try {
       for (const roleId of targetRoleIds) {
@@ -42,11 +44,11 @@ async function unlockAllChannels(guild, cfg = {}) {
         await channel.permissionOverwrites.edit(roleId, { SendMessages: null });
       }
       unlocked++;
-    } catch {
-      // ignore
+    } catch (err) {
+      errors.push(`#${channel.name} : ${err.message}`);
     }
   }
-  return unlocked;
+  return { unlocked, errors };
 }
 
 module.exports = {
@@ -58,12 +60,21 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const cfg = getConfig(interaction.guildId);
-    const locked = await lockAllChannels(interaction.guild, cfg);
+    const { locked, errors } = await lockAllChannels(interaction.guild, cfg);
+
+    if (locked === 0) {
+      const detail = errors.length ? `\nErreur : ${errors[0]}` : "";
+      return interaction.editReply(
+        `❌ Aucun salon n'a pu être verrouillé. Vérifie que le bot a bien la permission **Gérer les rôles** sur ce serveur.${detail}`
+      );
+    }
+
     updateConfig(interaction.guildId, { lockedDown: true });
     const targetLabel = cfg.lockdownRoleIds && cfg.lockdownRoleIds.length
       ? cfg.lockdownRoleIds.map((r) => `<@&${r}>`).join(", ")
       : "@everyone";
-    await interaction.editReply(`🔒 ${locked} salon(s) verrouillé(s) pour : ${targetLabel}.`);
+    const warn = errors.length ? `\n⚠️ ${errors.length} salon(s) n'ont pas pu être verrouillés.` : "";
+    await interaction.editReply(`🔒 ${locked} salon(s) verrouillé(s) pour : ${targetLabel}.${warn}`);
   },
 
   lockAllChannels,
