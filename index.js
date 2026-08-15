@@ -148,6 +148,13 @@ client.on("guildMemberAdd", async (member) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
+  if (interaction.isStringSelectMenu() && interaction.customId === "help_lang_select") {
+    const { buildEmbed, buildLangRow } = require("./commands/help");
+    const lang = interaction.values[0];
+    await interaction.update({ embeds: [buildEmbed(lang)], components: [buildLangRow(lang)] });
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
