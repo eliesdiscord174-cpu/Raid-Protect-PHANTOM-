@@ -1,7 +1,14 @@
 // store.js
-// Stockage simple des réglages anti-raid, un fichier JSON par serveur
-// dans le dossier /data. Chaque serveur (guild) a sa propre config,
-// donc le bot fonctionne indépendamment sur tous les serveurs où il est invité.
+// Stockage des réglages anti-raid, un fichier JSON par serveur dans /data
+// pour un accès rapide et synchrone. Ce dossier est cependant effacé à
+// chaque redéploiement sur les plans gratuits (disque non persistant).
+//
+// Pour survivre aux redéploiements, chaque écriture est aussi répliquée en
+// arrière-plan vers Supabase (si configuré), et au démarrage du bot
+// (voir preloadFromSupabase dans index.js) le contenu de Supabase est
+// rapatrié vers /data avant que quoi que ce soit d'autre ne s'exécute.
+// Le reste du code (toutes les commandes) continue d'utiliser getConfig /
+// updateConfig de façon synchrone, sans aucun changement.
 
 const fs = require("fs");
 const path = require("path");
@@ -9,27 +16,26 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  try {
+    const { createClient } = require("@supabase/supabase-js");
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  } catch (err) {
+    console.warn("⚠️  @supabase/supabase-js non installé, la persistance Supabase est désactivée.");
+  }
+}
+
 const DEFAULT_CONFIG = {
   enabled: true,
-  // Nombre de joins déclenchant une alerte de raid
   joinThreshold: 6,
-  // Fenêtre de temps (en secondes) dans laquelle ces joins sont comptés
   windowSeconds: 10,
-  // Actions automatiques combinables quand un raid est détecté :
-  // "lockdown" | "kick" | "ban" | "alert" — on peut en activer plusieurs à la fois,
-  // ex: ["lockdown", "ban"] verrouille les salons ET bannit les comptes suspects.
   actions: ["lockdown"],
-  // Âge minimum du compte en jours ; en dessous, considéré comme suspect pendant un raid
   minAccountAgeDays: 7,
-  // Salon où envoyer les alertes (id de salon, ou null)
   logChannelId: null,
-  // Rôles jamais impactés par les actions anti-raid (kick/ban ET lockdown)
   whitelistRoleIds: [],
-  // Rôles bloqués en priorité lors d'un lockdown. Si vide, @everyone est bloqué
-  // (comportement par défaut). Permet de ne verrouiller que certains rôles
-  // (ex: "Non vérifié") plutôt que tout le monde.
   lockdownRoleIds: [],
-  // true si un lockdown manuel/auto est actuellement actif
   lockedDown: false,
 };
 
@@ -52,6 +58,15 @@ function getConfig(guildId) {
 
 function saveConfig(guildId, config) {
   fs.writeFileSync(configPath(guildId), JSON.stringify(config, null, 2));
+  // Réplication en arrière-plan vers Supabase, sans bloquer l'appelant.
+  if (supabase) {
+    supabase
+      .from("raid_protect_configs")
+      .upsert({ guild_id: guildId, config, updated_at: new Date().toISOString() })
+      .then(({ error }) => {
+        if (error) console.error("Erreur sauvegarde Supabase :", error.message);
+      });
+  }
   return config;
 }
 
@@ -61,4 +76,22 @@ function updateConfig(guildId, patch) {
   return saveConfig(guildId, updated);
 }
 
-module.exports = { getConfig, saveConfig, updateConfig, DEFAULT_CONFIG };
+// Rapatrie toutes les configs depuis Supabase vers les fichiers locaux.
+// À appeler une fois au démarrage du bot, avant tout le reste.
+async function preloadFromSupabase() {
+  if (!supabase) {
+    console.log("ℹ️  Supabase non configuré : réglages stockés uniquement en local (non persistants entre redéploiements).");
+    return;
+  }
+  const { data, error } = await supabase.from("raid_protect_configs").select("guild_id, config");
+  if (error) {
+    console.error("❌ Erreur de chargement des configs depuis Supabase :", error.message);
+    return;
+  }
+  for (const row of data || []) {
+    fs.writeFileSync(configPath(row.guild_id), JSON.stringify(row.config, null, 2));
+  }
+  console.log(`✅ ${data ? data.length : 0} configuration(s) de serveur restaurée(s) depuis Supabase.`);
+}
+
+module.exports = { getConfig, saveConfig, updateConfig, preloadFromSupabase, DEFAULT_CONFIG };
