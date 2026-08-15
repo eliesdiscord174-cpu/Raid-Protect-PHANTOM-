@@ -1,6 +1,13 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
 const { getConfig, updateConfig } = require("../store");
 
+const ACTION_CHOICES = [
+  { name: "Verrouiller les salons (lockdown)", value: "lockdown" },
+  { name: "Kick les nouveaux comptes suspects", value: "kick" },
+  { name: "Ban les nouveaux comptes suspects", value: "ban" },
+  { name: "Alerter seulement", value: "alert" },
+];
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("antiraid")
@@ -23,18 +30,15 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName("action")
-        .setDescription("Action déclenchée quand un raid est détecté")
+        .setDescription("Ajoute ou retire une action anti-raid (plusieurs peuvent être actives en même temps)")
         .addStringOption((opt) =>
-          opt
-            .setName("type")
-            .setDescription("Type d'action")
-            .setRequired(true)
-            .addChoices(
-              { name: "Verrouiller les salons (lockdown)", value: "lockdown" },
-              { name: "Kick les nouveaux comptes suspects", value: "kick" },
-              { name: "Ban les nouveaux comptes suspects", value: "ban" },
-              { name: "Alerter seulement (aucune action auto)", value: "alert" }
-            )
+          opt.setName("operation").setDescription("Ajouter ou retirer").setRequired(true).addChoices(
+            { name: "Ajouter", value: "add" },
+            { name: "Retirer", value: "remove" }
+          )
+        )
+        .addStringOption((opt) =>
+          opt.setName("type").setDescription("Type d'action").setRequired(true).addChoices(...ACTION_CHOICES)
         )
     )
     .addSubcommand((sub) =>
@@ -44,6 +48,19 @@ module.exports = {
         .addIntegerOption((opt) =>
           opt.setName("jours").setDescription("Nombre de jours").setRequired(true).setMinValue(0)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("lockdown-roles")
+        .setDescription("Choisit quels rôles sont bloqués pendant un lockdown (vide = @everyone par défaut)")
+        .addStringOption((opt) =>
+          opt.setName("operation").setDescription("Ajouter, retirer ou lister").setRequired(true).addChoices(
+            { name: "Ajouter", value: "add" },
+            { name: "Retirer", value: "remove" },
+            { name: "Lister", value: "list" }
+          )
+        )
+        .addRoleOption((opt) => opt.setName("role").setDescription("Le rôle concerné").setRequired(false))
     ),
 
   async execute(interaction) {
@@ -59,7 +76,11 @@ module.exports = {
           { name: "État", value: cfg.enabled ? "✅ Activé" : "❌ Désactivé", inline: true },
           { name: "Verrouillage actif", value: cfg.lockedDown ? "🔒 Oui" : "🔓 Non", inline: true },
           { name: "Seuil de détection", value: `${cfg.joinThreshold} joins / ${cfg.windowSeconds}s`, inline: false },
-          { name: "Action en cas de raid", value: cfg.action, inline: true },
+          {
+            name: "Actions en cas de raid",
+            value: cfg.actions && cfg.actions.length ? cfg.actions.join(", ") : "Aucune",
+            inline: true,
+          },
           { name: "Âge minimum de compte", value: `${cfg.minAccountAgeDays} jours`, inline: true },
           {
             name: "Salon de logs",
@@ -69,6 +90,13 @@ module.exports = {
           {
             name: "Rôles en liste blanche",
             value: cfg.whitelistRoleIds.length ? cfg.whitelistRoleIds.map((r) => `<@&${r}>`).join(", ") : "Aucun",
+            inline: false,
+          },
+          {
+            name: "Rôles ciblés par le lockdown",
+            value: cfg.lockdownRoleIds && cfg.lockdownRoleIds.length
+              ? cfg.lockdownRoleIds.map((r) => `<@&${r}>`).join(", ")
+              : "@everyone (par défaut)",
             inline: false,
           }
         );
@@ -96,9 +124,22 @@ module.exports = {
     }
 
     if (sub === "action") {
+      const operation = interaction.options.getString("operation");
       const type = interaction.options.getString("type");
-      updateConfig(guildId, { action: type });
-      return interaction.reply({ content: `✅ Action anti-raid réglée sur **${type}**.`, ephemeral: true });
+      const cfg = getConfig(guildId);
+      let actions = cfg.actions || [];
+
+      if (operation === "add") {
+        if (!actions.includes(type)) actions = [...actions, type];
+      } else {
+        actions = actions.filter((a) => a !== type);
+      }
+
+      updateConfig(guildId, { actions });
+      return interaction.reply({
+        content: `✅ Actions anti-raid actuelles : **${actions.length ? actions.join(", ") : "aucune"}**.`,
+        ephemeral: true,
+      });
     }
 
     if (sub === "account-age") {
@@ -108,6 +149,32 @@ module.exports = {
         content: `✅ Les comptes créés il y a moins de **${days} jours** seront jugés suspects pendant un raid.`,
         ephemeral: true,
       });
+    }
+
+    if (sub === "lockdown-roles") {
+      const operation = interaction.options.getString("operation");
+      const role = interaction.options.getRole("role");
+      const cfg = getConfig(guildId);
+      let roles = cfg.lockdownRoleIds || [];
+
+      if (operation === "list") {
+        const label = roles.length ? roles.map((r) => `<@&${r}>`).join(", ") : "Aucun (bloque @everyone par défaut)";
+        return interaction.reply({ content: `🔒 Rôles ciblés par le lockdown : ${label}`, ephemeral: true });
+      }
+
+      if (!role) {
+        return interaction.reply({ content: "❌ Précise un rôle pour cette opération.", ephemeral: true });
+      }
+
+      if (operation === "add") {
+        if (!roles.includes(role.id)) roles = [...roles, role.id];
+      } else {
+        roles = roles.filter((r) => r !== role.id);
+      }
+
+      updateConfig(guildId, { lockdownRoleIds: roles });
+      const label = roles.length ? roles.map((r) => `<@&${r}>`).join(", ") : "@everyone (par défaut)";
+      return interaction.reply({ content: `✅ Rôles ciblés par le lockdown : ${label}`, ephemeral: true });
     }
   },
 };
