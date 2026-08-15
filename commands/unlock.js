@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const { updateConfig } = require("../store");
+const { getConfig, updateConfig } = require("../store");
 const { unlockAllChannels } = require("./lockdown");
 
 module.exports = {
@@ -10,7 +10,8 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    const unlocked = await unlockAllChannels(interaction.guild);
+    const cfg = getConfig(interaction.guildId);
+    const unlocked = await unlockAllChannels(interaction.guild, cfg);
     updateConfig(interaction.guildId, { lockedDown: false });
     await interaction.editReply(`🔓 Serveur déverrouillé. ${unlocked} salon(s) rétabli(s).`);
   },
