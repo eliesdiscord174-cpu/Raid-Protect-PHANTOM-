@@ -1,19 +1,42 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 const { getConfig, updateConfig } = require("../store");
 
-// Verrouille les salons. Si cfg.lockdownRoleIds est vide, bloque @everyone
-// (comportement par défaut). Sinon, ne bloque que les rôles choisis.
-// Les rôles en liste blanche gardent explicitement le droit d'écrire.
-// Retourne { locked, errors } pour que l'appelant sache si ça a vraiment marché.
+// Lit l'état actuel du bit "SendMessages" pour un rôle sur un salon, AVANT
+// toute modification. Permet de restaurer exactement ce qu'il y avait avant
+// le verrouillage, plutôt que de remettre "neutre" par défaut.
+function getSendMessagesState(channel, roleId) {
+  const overwrite = channel.permissionOverwrites.cache.get(roleId);
+  if (!overwrite) return "neutral";
+  if (overwrite.allow.has(PermissionFlagsBits.SendMessages)) return "allow";
+  if (overwrite.deny.has(PermissionFlagsBits.SendMessages)) return "deny";
+  return "neutral";
+}
+
+function stateToValue(state) {
+  if (state === "allow") return true;
+  if (state === "deny") return false;
+  return null;
+}
+
+// Verrouille les salons et sauvegarde un instantané de l'état précédent de
+// chaque salon/rôle (dans la config, donc persistant même après redéploiement)
+// pour pouvoir tout restaurer fidèlement avec unlockAllChannels.
 async function lockAllChannels(guild, cfg = {}) {
   const targetRoleIds = cfg.lockdownRoleIds && cfg.lockdownRoleIds.length ? cfg.lockdownRoleIds : [guild.roles.everyone.id];
   const whitelistRoleIds = cfg.whitelistRoleIds || [];
+  const allRoleIds = [...new Set([...targetRoleIds, ...whitelistRoleIds])];
 
   const channels = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
+  const snapshot = {};
   let locked = 0;
   const errors = [];
+
   for (const [, channel] of channels) {
     try {
+      snapshot[channel.id] = {};
+      for (const roleId of allRoleIds) {
+        snapshot[channel.id][roleId] = getSendMessagesState(channel, roleId);
+      }
       for (const roleId of targetRoleIds) {
         await channel.permissionOverwrites.edit(roleId, { SendMessages: false });
       }
@@ -25,29 +48,41 @@ async function lockAllChannels(guild, cfg = {}) {
       errors.push(`#${channel.name} : ${err.message}`);
     }
   }
+
+  if (locked > 0) {
+    updateConfig(guild.id, { lockdownSnapshot: snapshot });
+  }
+
   return { locked, errors };
 }
 
+// Restaure l'état exact d'avant le verrouillage (sauvegardé dans
+// cfg.lockdownSnapshot). Si aucun instantané n'existe (ex: verrouillage fait
+// avant cette mise à jour du bot), retombe sur un simple retrait du blocage.
 async function unlockAllChannels(guild, cfg = {}) {
+  const snapshot = cfg.lockdownSnapshot || null;
   const targetRoleIds = cfg.lockdownRoleIds && cfg.lockdownRoleIds.length ? cfg.lockdownRoleIds : [guild.roles.everyone.id];
   const whitelistRoleIds = cfg.whitelistRoleIds || [];
+  const allRoleIds = [...new Set([...targetRoleIds, ...whitelistRoleIds])];
 
   const channels = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
   let unlocked = 0;
   const errors = [];
+
   for (const [, channel] of channels) {
     try {
-      for (const roleId of targetRoleIds) {
-        await channel.permissionOverwrites.edit(roleId, { SendMessages: null });
-      }
-      for (const roleId of whitelistRoleIds) {
-        await channel.permissionOverwrites.edit(roleId, { SendMessages: null });
+      const channelSnapshot = snapshot ? snapshot[channel.id] : null;
+      for (const roleId of allRoleIds) {
+        const state = channelSnapshot && channelSnapshot[roleId] !== undefined ? channelSnapshot[roleId] : "neutral";
+        await channel.permissionOverwrites.edit(roleId, { SendMessages: stateToValue(state) });
       }
       unlocked++;
     } catch (err) {
       errors.push(`#${channel.name} : ${err.message}`);
     }
   }
+
+  updateConfig(guild.id, { lockdownSnapshot: null });
   return { unlocked, errors };
 }
 
@@ -74,7 +109,7 @@ module.exports = {
       ? cfg.lockdownRoleIds.map((r) => `<@&${r}>`).join(", ")
       : "@everyone";
     const warn = errors.length ? `\n⚠️ ${errors.length} salon(s) n'ont pas pu être verrouillés.` : "";
-    await interaction.editReply(`🔒 ${locked} salon(s) verrouillé(s) pour : ${targetLabel}.${warn}`);
+    await interaction.editReply(`🔒 ${locked} salon(s) verrouillé(s) pour : ${targetLabel}. L'état précédent a été sauvegardé pour restauration.${warn}`);
   },
 
   lockAllChannels,
