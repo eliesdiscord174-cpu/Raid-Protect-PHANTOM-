@@ -15,14 +15,20 @@ const DEFAULT_CONFIG = {
   joinThreshold: 6,
   // Fenêtre de temps (en secondes) dans laquelle ces joins sont comptés
   windowSeconds: 10,
-  // Action automatique quand un raid est détecté : "lockdown" | "kick" | "ban" | "alert"
-  action: "lockdown",
+  // Actions automatiques combinables quand un raid est détecté :
+  // "lockdown" | "kick" | "ban" | "alert" — on peut en activer plusieurs à la fois,
+  // ex: ["lockdown", "ban"] verrouille les salons ET bannit les comptes suspects.
+  actions: ["lockdown"],
   // Âge minimum du compte en jours ; en dessous, considéré comme suspect pendant un raid
   minAccountAgeDays: 7,
   // Salon où envoyer les alertes (id de salon, ou null)
   logChannelId: null,
-  // Rôles jamais impactés par les actions anti-raid
+  // Rôles jamais impactés par les actions anti-raid (kick/ban ET lockdown)
   whitelistRoleIds: [],
+  // Rôles bloqués en priorité lors d'un lockdown. Si vide, @everyone est bloqué
+  // (comportement par défaut). Permet de ne verrouiller que certains rôles
+  // (ex: "Non vérifié") plutôt que tout le monde.
+  lockdownRoleIds: [],
   // true si un lockdown manuel/auto est actuellement actif
   lockedDown: false,
 };
