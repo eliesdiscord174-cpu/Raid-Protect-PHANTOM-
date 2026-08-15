@@ -51,6 +51,11 @@ const TRANSLATIONS = {
         value: "Bans everyone who joined in the last X minutes — quick cleanup after a raid.",
       },
       { name: "/slowmode <seconds>", value: "Sets slowmode on this channel without a full lockdown." },
+      {
+        name: "/testraid [target]",
+        value: "Simulates a raid to test your configuration without waiting for a real one. Pass a target member to actually test kick/ban.",
+      },
+      { name: "/stopraid", value: "Emergency stop: unlocks everything and resets the current raid detection counter." },
     ],
   },
   fr: {
@@ -100,6 +105,11 @@ const TRANSLATIONS = {
         value: "Bannit tous ceux arrivés dans les X dernières minutes — nettoyage rapide après un raid.",
       },
       { name: "/slowmode <secondes>", value: "Règle le mode lent de ce salon sans le verrouiller complètement." },
+      {
+        name: "/testraid [cible]",
+        value: "Simule un raid pour tester ta configuration sans en attendre un vrai. Fournis une cible pour tester réellement kick/ban.",
+      },
+      { name: "/stopraid", value: "Arrêt d'urgence : déverrouille tout et réinitialise le compteur de détection en cours." },
     ],
   },
   es: {
@@ -149,6 +159,11 @@ const TRANSLATIONS = {
         value: "Banea a todos los que se unieron en los últimos X minutos — limpieza rápida tras un raid.",
       },
       { name: "/slowmode <segundos>", value: "Activa el modo lento en este canal sin bloquearlo por completo." },
+      {
+        name: "/testraid [objetivo]",
+        value: "Simula un raid para probar tu configuración sin esperar uno real. Indica un objetivo para probar kick/ban de verdad.",
+      },
+      { name: "/stopraid", value: "Parada de emergencia: desbloquea todo y reinicia el contador de detección actual." },
     ],
   },
   de: {
@@ -198,6 +213,11 @@ const TRANSLATIONS = {
         value: "Bannt alle, die in den letzten X Minuten beigetreten sind — schnelle Aufräumaktion nach einem Raid.",
       },
       { name: "/slowmode <sekunden>", value: "Aktiviert den Slowmode in diesem Kanal, ohne ihn komplett zu sperren." },
+      {
+        name: "/testraid [ziel]",
+        value: "Simuliert einen Raid, um deine Konfiguration zu testen. Mit einem Ziel wird kick/ban wirklich getestet.",
+      },
+      { name: "/stopraid", value: "Not-Stopp: entsperrt alles und setzt den aktuellen Erkennungszähler zurück." },
     ],
   },
   pt: {
@@ -247,6 +267,11 @@ const TRANSLATIONS = {
         value: "Bane todos os que entraram nos últimos X minutos — limpeza rápida após um raid.",
       },
       { name: "/slowmode <segundos>", value: "Ativa o modo lento neste canal sem o bloquear por completo." },
+      {
+        name: "/testraid [alvo]",
+        value: "Simula um raid para testar a tua configuração sem esperar por um real. Indica um alvo para testar kick/ban de verdade.",
+      },
+      { name: "/stopraid", value: "Paragem de emergência: desbloqueia tudo e reinicia o contador de deteção atual." },
     ],
   },
   ar: {
@@ -296,6 +321,11 @@ const TRANSLATIONS = {
         value: "حظر كل من انضم خلال آخر X دقيقة — تنظيف سريع بعد الغارة.",
       },
       { name: "/slowmode <ثواني>", value: "تفعيل الوضع البطيء في هذه القناة دون قفلها بالكامل." },
+      {
+        name: "/testraid [هدف]",
+        value: "محاكاة غارة لاختبار إعداداتك دون انتظار غارة حقيقية. حدد هدفًا لاختبار kick/ban فعليًا.",
+      },
+      { name: "/stopraid", value: "إيقاف طارئ: يفتح كل شيء ويعيد ضبط عداد الكشف الحالي." },
     ],
   },
 };
