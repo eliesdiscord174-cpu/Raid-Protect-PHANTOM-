@@ -10,13 +10,13 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
-const { Client, GatewayIntentBits, EmbedBuilder, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, Collection, REST, Routes } = require("discord.js");
 require("dotenv").config();
 
 const { getConfig, updateConfig } = require("./store");
 const { lockAllChannels } = require("./commands/lockdown");
 
-const { DISCORD_BOT_TOKEN, PORT = 3000 } = process.env;
+const { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, PORT = 3000 } = process.env;
 
 // Petit serveur HTTP, uniquement pour que Render (plan gratuit "Web Service")
 // considère le service comme actif. Le bot lui-même fonctionne via WebSocket
@@ -36,9 +36,30 @@ const client = new Client({
 // Chargement dynamique des commandes slash
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, "commands");
+const commandDefinitions = [];
 for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith(".js"))) {
   const command = require(path.join(commandsPath, file));
-  if (command.data) client.commands.set(command.data.name, command);
+  if (command.data) {
+    client.commands.set(command.data.name, command);
+    commandDefinitions.push(command.data.toJSON());
+  }
+}
+
+// Enregistre les commandes slash globalement au démarrage. Ça évite d'avoir
+// besoin d'un accès Shell (payant sur Render) pour lancer deploy-commands.js.
+async function registerCommands() {
+  if (!DISCORD_BOT_TOKEN || !DISCORD_CLIENT_ID) {
+    console.warn("⚠️  DISCORD_BOT_TOKEN ou DISCORD_CLIENT_ID manquant : commandes non enregistrées.");
+    return;
+  }
+  try {
+    const rest = new REST().setToken(DISCORD_BOT_TOKEN);
+    console.log(`📤 Enregistrement de ${commandDefinitions.length} commande(s) slash...`);
+    await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: commandDefinitions });
+    console.log("✅ Commandes enregistrées avec succès.");
+  } catch (err) {
+    console.error("❌ Erreur lors de l'enregistrement des commandes :", err);
+  }
 }
 
 // Fenêtres de joins récents, par serveur : Map<guildId, number[]> (timestamps ms)
@@ -148,6 +169,7 @@ client.on("interactionCreate", async (interaction) => {
 client.once("clientReady", () => {
   console.log(`✅ Bot anti-raid connecté en tant que ${client.user.tag}`);
   console.log(`🛡️  Actif sur ${client.guilds.cache.size} serveur(s).`);
+  registerCommands();
 });
 
 client.login(DISCORD_BOT_TOKEN);
