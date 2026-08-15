@@ -11,8 +11,9 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const cfg = getConfig(interaction.guildId);
-    const unlocked = await unlockAllChannels(interaction.guild, cfg);
+    const { unlocked, errors } = await unlockAllChannels(interaction.guild, cfg);
     updateConfig(interaction.guildId, { lockedDown: false });
-    await interaction.editReply(`🔓 Serveur déverrouillé. ${unlocked} salon(s) rétabli(s).`);
+    const warn = errors.length ? `\n⚠️ ${errors.length} salon(s) n'ont pas pu être déverrouillés.` : "";
+    await interaction.editReply(`🔓 Serveur déverrouillé. ${unlocked} salon(s) rétabli(s).${warn}`);
   },
 };
