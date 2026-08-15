@@ -13,7 +13,7 @@ const http = require("http");
 const { Client, GatewayIntentBits, EmbedBuilder, Collection, REST, Routes } = require("discord.js");
 require("dotenv").config();
 
-const { getConfig, updateConfig } = require("./store");
+const { getConfig, updateConfig, preloadFromSupabase } = require("./store");
 const { lockAllChannels } = require("./commands/lockdown");
 
 const { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, PORT = 3000 } = process.env;
@@ -115,15 +115,26 @@ client.on("guildMemberAdd", async (member) => {
   );
 
   if (activeActions.includes("lockdown") && !cfg.lockedDown) {
-    const locked = await lockAllChannels(guild, cfg);
-    updateConfig(guild.id, { lockedDown: true });
-    await sendAlert(
-      guild,
-      cfg,
-      "🔒 Verrouillage automatique",
-      `${locked} salon(s) verrouillé(s) suite à la détection du raid. Utilisez \`/unlock\` une fois la menace passée.`,
-      0xf59e0b
-    );
+    const { locked, errors } = await lockAllChannels(guild, cfg);
+    if (locked > 0) {
+      updateConfig(guild.id, { lockedDown: true });
+      await sendAlert(
+        guild,
+        cfg,
+        "🔒 Verrouillage automatique",
+        `${locked} salon(s) verrouillé(s) suite à la détection du raid. Utilisez \`/unlock\` une fois la menace passée.`,
+        0xf59e0b
+      );
+    } else {
+      await sendAlert(
+        guild,
+        cfg,
+        "❌ Échec du verrouillage automatique",
+        `Aucun salon n'a pu être verrouillé. Vérifie que le bot a la permission **Gérer les rôles**.${
+          errors.length ? `\n${errors[0]}` : ""
+        }`
+      );
+    }
   }
 
   // ban prioritaire sur kick si les deux sont activés en même temps
@@ -182,4 +193,4 @@ client.once("clientReady", () => {
   registerCommands();
 });
 
-client.login(DISCORD_BOT_TOKEN);
+preloadFromSupabase().finally(() => client.login(DISCORD_BOT_TOKEN));
