@@ -63,7 +63,7 @@ async function registerCommands() {
 }
 
 // Fenêtres de joins récents, par serveur : Map<guildId, number[]> (timestamps ms)
-const recentJoins = new Map();
+const { getRecentJoins, setRecentJoins, resetRecentJoins } = require("./raid-state");
 
 async function sendAlert(guild, cfg, title, description, color = 0xef4444) {
   if (!cfg.logChannelId) return;
@@ -94,11 +94,11 @@ client.on("guildMemberAdd", async (member) => {
   const now = Date.now();
   const windowMs = cfg.windowSeconds * 1000;
 
-  const timestamps = recentJoins.get(guild.id) || [];
+  const timestamps = getRecentJoins(guild.id);
   timestamps.push(now);
   // On ne garde que les joins dans la fenêtre de temps
   const filtered = timestamps.filter((t) => now - t <= windowMs);
-  recentJoins.set(guild.id, filtered);
+  setRecentJoins(guild.id, filtered);
 
   if (filtered.length < cfg.joinThreshold) return;
 
@@ -147,7 +147,7 @@ client.on("guildMemberAdd", async (member) => {
   }
 
   // Évite de re-déclencher en boucle tant que la fenêtre reste pleine
-  recentJoins.set(guild.id, []);
+  resetRecentJoins(guild.id);
 });
 
 client.on("interactionCreate", async (interaction) => {
