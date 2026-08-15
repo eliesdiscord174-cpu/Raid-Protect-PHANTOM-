@@ -16,7 +16,8 @@ module.exports = {
 
     let unlocked = 0;
     if (cfg.lockedDown) {
-      unlocked = await unlockAllChannels(guild, cfg);
+      const result = await unlockAllChannels(guild, cfg);
+      unlocked = result.unlocked;
       updateConfig(guild.id, { lockedDown: false });
     }
 
