@@ -31,9 +31,17 @@ module.exports = {
       if (cfg.lockedDown) {
         summary.push("🔒 Lockdown déjà actif, pas de nouveau verrouillage déclenché.");
       } else {
-        const locked = await lockAllChannels(guild, cfg);
-        updateConfig(guild.id, { lockedDown: true });
-        summary.push(`🔒 Lockdown simulé : ${locked} salon(s) verrouillé(s).`);
+        const { locked, errors } = await lockAllChannels(guild, cfg);
+        if (locked === 0) {
+          summary.push(
+            `❌ Aucun salon verrouillé — vérifie que le bot a la permission **Gérer les rôles**.${
+              errors.length ? ` (${errors[0]})` : ""
+            }`
+          );
+        } else {
+          updateConfig(guild.id, { lockedDown: true });
+          summary.push(`🔒 Lockdown simulé : ${locked} salon(s) verrouillé(s).`);
+        }
       }
     }
 
